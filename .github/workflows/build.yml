@@ -73,8 +73,7 @@ jobs:
 
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <application
-                  android:label="Luri Keyboard"
+              <application android:label="Luri Keyboard"
                   android:theme="@android:style/Theme.Material.Light">
                   <service
                       android:name=".LuriIME"
@@ -84,8 +83,7 @@ jobs:
                       <intent-filter>
                           <action android:name="android.view.InputMethod" />
                       </intent-filter>
-                      <meta-data
-                          android:name="android.view.im"
+                      <meta-data android:name="android.view.im"
                           android:resource="@xml/method" />
                   </service>
               </application>
@@ -103,14 +101,12 @@ jobs:
 
           import android.inputmethodservice.InputMethodService;
           import android.graphics.Color;
-          import android.graphics.Typeface;
           import android.view.View;
           import android.view.ViewGroup;
           import android.view.Gravity;
           import android.view.inputmethod.InputConnection;
           import android.widget.Button;
           import android.widget.LinearLayout;
-          import android.widget.TextView;
 
           public class LuriIME extends InputMethodService {
               boolean english = false;
@@ -130,15 +126,15 @@ jobs:
                       ? new String[][] {
                           {"q","w","e","r","t","y","u","i","o","p"},
                           {"a","s","d","f","g","h","j","k","l"},
-                          {"⇧","z","x","c","v","b","n","m","⌫"},
-                          {"?123","EN/LU",",","SPACE",".","↵"}
+                          {"z","x","c","v","b","n","m","⌫"},
+                          {"EN/LU","SPACE","↵"}
                         }
                       : new String[][] {
                           {"ا","ب","پ","ت","ج","چ","خ","د","ر","ز"},
                           {"ژ","س","ش","غ","ف","ق","ل","م","ن"},
                           {"و","ه","ی","ک","گ","ڡ","ڢ","ڤ","⌫"},
-                          {"ڶ","ڹ","ۏ","ڔ","ݕ","ݖ","ݢ","ٮ","د̣","ی̇"},
-                          {"وو","ا̇","EN/LU","SPACE","،","↵"}
+                          {"ڶ","ڹ","ۏ","ڔ","ݕ","ݖ","ݢ","ٮ"},
+                          {"د̣","ی̇","وو","ا̇","EN/LU","SPACE","↵"}
                         };
 
                   for (String[] row : rows) {
@@ -155,7 +151,8 @@ jobs:
                           b.setMinHeight(0);
                           b.setMinimumHeight(0);
                           b.setTextColor(Color.BLACK);
-                          b.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.WHITE));
+                          b.setBackgroundTintList(
+                              android.content.res.ColorStateList.valueOf(Color.WHITE));
                           LinearLayout.LayoutParams p =
                               new LinearLayout.LayoutParams(0, 48, 1);
                           p.setMargins(2, 2, 2, 2);
@@ -189,10 +186,13 @@ jobs:
 
       - name: Build APK
         run: gradle assembleDebug
+
       - name: Verify APK
         run: |
           ls -lah app/build/outputs/apk/debug/
           file app/build/outputs/apk/debug/app-debug.apk
+          test -s app/build/outputs/apk/debug/app-debug.apk
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
