@@ -3,6 +3,9 @@ name: Build Luri Keyboard APK
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
   build:
@@ -12,18 +15,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Java
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: "8.9"
 
       - name: Create Android project
+        shell: bash
         run: |
           mkdir -p app/src/main/java/com/luri/keyboard
           mkdir -p app/src/main/res/xml
@@ -37,6 +41,7 @@ jobs:
                   gradlePluginPortal()
               }
           }
+
           dependencyResolutionManagement {
               repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
               repositories {
@@ -44,8 +49,9 @@ jobs:
                   mavenCentral()
               }
           }
-          rootProject.name = 'LuriKeyboard'
-          include ':app'
+
+          rootProject.name = "LuriKeyboard"
+          include(":app")
           EOF
 
           cat > build.gradle <<'EOF'
@@ -54,13 +60,20 @@ jobs:
           }
           EOF
 
+          cat > gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          EOF
+
           cat > app/build.gradle <<'EOF'
           plugins {
               id 'com.android.application'
           }
+
           android {
               namespace 'com.luri.keyboard'
               compileSdk 35
+
               defaultConfig {
                   applicationId 'com.luri.keyboard'
                   minSdk 23
@@ -72,18 +85,26 @@ jobs:
           EOF
 
           cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <application android:label="Luri Keyboard"
-                  android:theme="@android:style/Theme.Material.Light">
+              <application
+                  android:label="Luri Keyboard"
+                  android:allowBackup="false"
+                  android:supportsRtl="true"
+                  android:theme="@android:style/Theme.Material.Light.NoActionBar">
+
                   <service
                       android:name=".LuriIME"
                       android:label="Luri Keyboard"
                       android:permission="android.permission.BIND_INPUT_METHOD"
                       android:exported="true">
+
                       <intent-filter>
                           <action android:name="android.view.InputMethod" />
                       </intent-filter>
-                      <meta-data android:name="android.view.im"
+
+                      <meta-data
+                          android:name="android.view.im"
                           android:resource="@xml/method" />
                   </service>
               </application>
@@ -91,9 +112,14 @@ jobs:
           EOF
 
           cat > app/src/main/res/xml/method.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
           <input-method xmlns:android="http://schemas.android.com/apk/res/android"
-              android:isDefault="false"
-              android:supportsSwitchingToNextInputMethod="true" />
+              android:supportsSwitchingToNextInputMethod="true">
+              <subtype
+                  android:label="Luri"
+                  android:imeSubtypeLocale="ku"
+                  android:imeSubtypeMode="keyboard" />
+          </input-method>
           EOF
 
           cat > app/src/main/java/com/luri/keyboard/LuriIME.java <<'EOF'
@@ -101,100 +127,130 @@ jobs:
 
           import android.inputmethodservice.InputMethodService;
           import android.graphics.Color;
+          import android.graphics.Typeface;
+          import android.graphics.drawable.GradientDrawable;
+          import android.view.Gravity;
           import android.view.View;
           import android.view.ViewGroup;
-          import android.view.Gravity;
           import android.view.inputmethod.InputConnection;
           import android.widget.Button;
           import android.widget.LinearLayout;
 
           public class LuriIME extends InputMethodService {
-              boolean english = false;
+
+              private boolean english = false;
+
+              private final String[][] luriRows = {
+                  {"ض","ص","ث","ق","ف","غ","ع","ه","خ","ح","ج"},
+                  {"ش","س","ی","ب","ل","ا","ت","ن","م","ک","گ"},
+                  {"ظ","ط","ز","ر","ذ","د","پ","و","چ","ژ","ڕ"},
+                  {"ا","ڡ","ڢ","ڤ","ڶ","ڹ","ۏ","ݕ","ݖ","ٮ","ی̇"},
+                  {"ݢ","د̣","ا̇","وو"," ","⌫","↵"}
+              };
+
+              private final String[][] englishRows = {
+                  {"q","w","e","r","t","y","u","i","o","p"},
+                  {"a","s","d","f","g","h","j","k","l"},
+                  {"⇧","z","x","c","v","b","n","m","⌫"},
+                  {"?123",",","EN"," ",".","↵"}
+              };
 
               @Override
               public View onCreateInputView() {
-                  return keyboard();
+                  return createKeyboard();
               }
 
-              LinearLayout keyboard() {
+              private View createKeyboard() {
                   LinearLayout root = new LinearLayout(this);
                   root.setOrientation(LinearLayout.VERTICAL);
-                  root.setPadding(3, 4, 3, 4);
-                  root.setBackgroundColor(Color.rgb(225, 230, 236));
+                  root.setPadding(3, 5, 3, 5);
+                  root.setBackgroundColor(Color.rgb(220, 224, 230));
 
-                  String[][] rows = english
-                      ? new String[][] {
-                          {"q","w","e","r","t","y","u","i","o","p"},
-                          {"a","s","d","f","g","h","j","k","l"},
-                          {"z","x","c","v","b","n","m","⌫"},
-                          {"EN/LU","SPACE","↵"}
-                        }
-                      : new String[][] {
-                          {"ا","ب","پ","ت","ج","چ","خ","د","ر","ز"},
-                          {"ژ","س","ش","غ","ف","ق","ل","م","ن"},
-                          {"و","ه","ی","ک","گ","ڡ","ڢ","ڤ","⌫"},
-                          {"ڶ","ڹ","ۏ","ڔ","ݕ","ݖ","ݢ","ٮ"},
-                          {"د̣","ی̇","وو","ا̇","EN/LU","SPACE","↵"}
-                        };
+                  String[][] rows = english ? englishRows : luriRows;
 
                   for (String[] row : rows) {
                       LinearLayout line = new LinearLayout(this);
+                      line.setOrientation(LinearLayout.HORIZONTAL);
                       line.setGravity(Gravity.CENTER);
+                      line.setLayoutParams(new LinearLayout.LayoutParams(
+                          ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
                       for (String key : row) {
-                          Button b = new Button(this);
-                          b.setText(key);
-                          b.setTextSize(17);
-                          b.setPadding(0, 0, 0, 0);
-                          b.setAllCaps(false);
-                          b.setMinWidth(0);
-                          b.setMinimumWidth(0);
-                          b.setMinHeight(0);
-                          b.setMinimumHeight(0);
-                          b.setTextColor(Color.BLACK);
-                          b.setBackgroundTintList(
-                              android.content.res.ColorStateList.valueOf(Color.WHITE));
-                          LinearLayout.LayoutParams p =
-                              new LinearLayout.LayoutParams(0, 48, 1);
-                          p.setMargins(2, 2, 2, 2);
-                          line.addView(b, p);
-                          b.setOnClickListener(v -> press(key));
+                          Button button = new Button(this);
+                          button.setText(key.equals("EN") ? "لوری" : key);
+                          button.setTextSize(key.length() > 2 ? 14 : 18);
+                          button.setAllCaps(false);
+                          button.setTypeface(Typeface.DEFAULT);
+                          button.setPadding(0, 0, 0, 0);
+
+                          GradientDrawable bg = new GradientDrawable();
+                          bg.setColor(Color.WHITE);
+                          bg.setCornerRadius(8);
+                          bg.setStroke(1, Color.LTGRAY);
+                          button.setBackground(bg);
+
+                          LinearLayout.LayoutParams lp =
+                              new LinearLayout.LayoutParams(0,
+                                  ViewGroup.LayoutParams.MATCH_PARENT, 1f);
+                          lp.setMargins(2, 2, 2, 2);
+                          line.addView(button, lp);
+
+                          button.setOnClickListener(v -> handleKey(key));
                       }
-                      root.addView(line, new LinearLayout.LayoutParams(
-                          ViewGroup.LayoutParams.MATCH_PARENT,
-                          ViewGroup.LayoutParams.WRAP_CONTENT));
+
+                      root.addView(line);
                   }
+
                   return root;
               }
 
-              void press(String key) {
-                  InputConnection ic = getCurrentInputConnection();
-                  if (key.equals("EN/LU")) {
+              private void handleKey(String key) {
+                  if (key.equals("EN") || key.equals("?123")) {
                       english = !english;
-                      setInputView(keyboard());
+                      setInputView(createKeyboard());
                       return;
                   }
-                  if (key.equals("SPACE")) key = " ";
-                  if (key.equals("↵")) key = "\n";
+
+                  InputConnection ic = getCurrentInputConnection();
+                  if (ic == null) return;
+
                   if (key.equals("⌫")) {
-                      if (ic != null) ic.deleteSurroundingText(1, 0);
-                      return;
+                      ic.deleteSurroundingText(1, 0);
+                  } else if (key.equals("↵")) {
+                      ic.commitText("\n", 1);
+                  } else if (key.equals("⇧")) {
+                      // Shift is reserved for a future uppercase layout.
+                  } else {
+                      ic.commitText(key, 1);
                   }
-                  if (ic != null) ic.commitText(key, 1);
               }
           }
           EOF
 
       - name: Build APK
-        run: gradle assembleDebug
+        run: gradle assembleDebug --stacktrace
 
       - name: Verify APK
+        shell: bash
         run: |
+          set -euxo pipefail
           ls -lah app/build/outputs/apk/debug/
-          file app/build/outputs/apk/debug/app-debug.apk
+          test -f app/build/outputs/apk/debug/app-debug.apk
           test -s app/build/outputs/apk/debug/app-debug.apk
+          file app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Inspect APK contents
+        shell: bash
+        run: |
+          set -euxo pipefail
+          unzip -t app/build/outputs/apk/debug/app-debug.apk
+          unzip -l app/build/outputs/apk/debug/app-debug.apk
+          echo "APK size in bytes:"
+          stat -c '%s' app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Luri-Keyboard-APK
           path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
