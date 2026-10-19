@@ -220,12 +220,12 @@ jobs:
           import java.text.Normalizer;
 
           public class LurishIME extends InputMethodService {
-              private static final int BG = Color.rgb(250, 225, 230);
+              private static final int BG = Color.rgb(246, 218, 224);
               private static final int KEY = Color.rgb(255, 255, 255);
               private static final int INK = Color.rgb(32, 30, 32);
-              private static final int BORDER = Color.rgb(235, 211, 216);
-              private static final int PINK = Color.rgb(224, 125, 149);
-              private static final int PINK_DARK = Color.rgb(202, 87, 119);
+              private static final int BORDER = Color.rgb(239, 226, 230);
+              private static final int PINK = Color.rgb(246, 113, 143);
+              private static final int PINK_DARK = Color.rgb(224, 77, 116);
               private boolean latinMode = false;
               private boolean symbolMode = false;
               private LinearLayout root, keysArea;
@@ -280,6 +280,7 @@ jobs:
                   b.setText(label);
                   b.setTextColor(INK);
                   b.setTextSize(18);
+                  b.setIncludeFontPadding(false);
                   b.setAllCaps(false);
                   b.setTypeface(Typeface.DEFAULT);
                   b.setMinHeight(0);
@@ -287,8 +288,9 @@ jobs:
                   b.setMinWidth(0);
                   b.setMinimumWidth(0);
                   b.setPadding(dp(1), 0, dp(1), 0);
-                  b.setBackground(background(color, 7));
-                  b.setElevation(dp(1.5f));
+                  b.setBackground(background(color, 11));
+                  b.setElevation(dp(2.5f));
+                  b.setStateListAnimator(null);
                   b.setOnClickListener(v -> action.run());
                   return b;
               }
@@ -296,22 +298,22 @@ jobs:
               private void key(LinearLayout row, String label, String output,
                                int color, float weight) {
                   Button b = makeButton(label, color, () -> commit(output));
-                  b.setTextSize(label.length() > 2 ? 15 : 20);
+                  b.setTextSize(label.length() > 2 ? 14 : 20);
                   LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
                       0, dp(setting("keyHeight", 38)), weight);
                   int gap = setting("spacing", 2);
-                  p.setMargins(dp(gap), dp(1), dp(gap), dp(1));
+                  p.setMargins(dp(gap), dp(2), dp(gap), dp(2));
                   row.addView(b, p);
               }
 
               private void action(LinearLayout row, String label, int color,
                                  float weight, Runnable task) {
                   Button b = makeButton(label, color, task);
-                  b.setTextSize(label.length() > 5 ? 12 : 17);
+                  b.setTextSize(label.length() > 5 ? 11 : 16);
                   LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
                       0, dp(setting("keyHeight", 38)), weight);
                   int gap = setting("spacing", 2);
-                  p.setMargins(dp(gap), dp(1), dp(gap), dp(1));
+                  p.setMargins(dp(gap), dp(2), dp(gap), dp(2));
                   row.addView(b, p);
               }
 
@@ -385,9 +387,16 @@ jobs:
               private View buildKeyboard() {
                   root = new LinearLayout(this);
                   root.setOrientation(LinearLayout.VERTICAL);
-                  root.setBackgroundColor(BG);
-                  int pad = dp(3);
-                  root.setPadding(pad, pad, pad, pad);
+                  GradientDrawable keyboardBg = new GradientDrawable(
+                      GradientDrawable.Orientation.TOP_BOTTOM,
+                      new int[]{Color.rgb(250, 226, 231), Color.rgb(242, 205, 215)});
+                  keyboardBg.setCornerRadius(dp(14));
+                  root.setBackground(keyboardBg);
+                  int pad = dp(4);
+                  root.setPadding(pad, dp(5), pad, dp(5));
+                  int desiredHeight = setting("height", 270);
+                  root.setMinimumHeight(dp(desiredHeight));
+                  root.setLayoutParams(new android.view.ViewGroup.LayoutParams(-1, dp(desiredHeight)));
 
                   if (enabled("toolbar", true)) {
                       LinearLayout tools = row();
@@ -400,14 +409,18 @@ jobs:
                       action(tools, "🌐", KEY, 1, () -> {
                           try { switchToNextInputMethod(false); } catch (Exception ignored) {}
                       });
-                      root.addView(tools);
+                      LinearLayout.LayoutParams toolParams = new LinearLayout.LayoutParams(-1, dp(34));
+                      toolParams.bottomMargin = dp(3);
+                      root.addView(tools, toolParams);
                   }
 
                   if (enabled("numbers", true)) {
                       LinearLayout nums = row();
                       for (String n : new String[]{"1","2","3","4","5","6","7","8","9","0"})
                           key(nums, n, n, KEY, 1);
-                      root.addView(nums);
+                      LinearLayout.LayoutParams numParams = new LinearLayout.LayoutParams(-1, dp(setting("keyHeight", 38)));
+                      numParams.bottomMargin = dp(2);
+                      root.addView(nums, numParams);
                   }
 
                   keysArea = new LinearLayout(this);
@@ -453,8 +466,8 @@ jobs:
                       }
                       LinearLayout extra = row();
                       action(extra, "ABC", accent(), 1, () -> { symbolMode = false; refresh(); });
-                      action(extra, "ZWNJ", accent(), 1.2f, () -> commit("\u200C"));
-                      action(extra, "Tilde ـ", accent(), 1.4f, () -> commit("ـ"));
+                      action(extra, "Mad", accent(), 1.2f, () -> commit("\u200C"));
+                      action(extra, "Nimad", accent(), 1.4f, () -> commit("ـ"));
                       keysArea.addView(extra);
                       return;
                   }
@@ -472,8 +485,8 @@ jobs:
                           keysArea.addView(r);
                       }
                       LinearLayout extra = row();
-                      action(extra, "ZWNJ", accent(), 1.2f, () -> commit("\u200C"));
-                      action(extra, "Tilde ـ", accent(), 1.5f, () -> commit("ـ"));
+                      action(extra, "Mad", accent(), 1.2f, () -> commit("\u200C"));
+                      action(extra, "Nimad", accent(), 1.5f, () -> commit("ـ"));
                       action(extra, "؟", KEY, 0.8f, () -> commit("؟"));
                       action(extra, "؛", KEY, 0.8f, () -> commit("؛"));
                       keysArea.addView(extra);
@@ -490,8 +503,8 @@ jobs:
                           keysArea.addView(r);
                       }
                       LinearLayout extra = row();
-                      action(extra, "ZWNJ", accent(), 1.2f, () -> commit("\u200C"));
-                      action(extra, "Tilde ـ", accent(), 1.5f, () -> commit("ـ"));
+                      action(extra, "Mad", accent(), 1.2f, () -> commit("\u200C"));
+                      action(extra, "Nimad", accent(), 1.5f, () -> commit("ـ"));
                       action(extra, "?", KEY, 0.8f, () -> commit("?"));
                       action(extra, ";", KEY, 0.8f, () -> commit(";"));
                       keysArea.addView(extra);
