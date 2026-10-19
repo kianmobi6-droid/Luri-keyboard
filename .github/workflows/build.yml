@@ -31,7 +31,6 @@ jobs:
         run: |
           mkdir -p app/src/main/java/com/luri/keyboard
           mkdir -p app/src/main/res/xml
-          mkdir -p app/src/main/res/values
 
           cat > settings.gradle <<'EOF'
           pluginManagement {
@@ -41,7 +40,6 @@ jobs:
                   gradlePluginPortal()
               }
           }
-
           dependencyResolutionManagement {
               repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
               repositories {
@@ -49,7 +47,6 @@ jobs:
                   mavenCentral()
               }
           }
-
           rootProject.name = "LuriKeyboard"
           include(":app")
           EOF
@@ -92,17 +89,14 @@ jobs:
                   android:allowBackup="false"
                   android:supportsRtl="true"
                   android:theme="@android:style/Theme.Material.Light.NoActionBar">
-
                   <service
                       android:name=".LuriIME"
                       android:label="Luri Keyboard"
                       android:permission="android.permission.BIND_INPUT_METHOD"
                       android:exported="true">
-
                       <intent-filter>
                           <action android:name="android.view.InputMethod" />
                       </intent-filter>
-
                       <meta-data
                           android:name="android.view.im"
                           android:resource="@xml/method" />
@@ -125,10 +119,9 @@ jobs:
           cat > app/src/main/java/com/luri/keyboard/LuriIME.java <<'EOF'
           package com.luri.keyboard;
 
-          import android.inputmethodservice.InputMethodService;
           import android.graphics.Color;
-          import android.graphics.Typeface;
           import android.graphics.drawable.GradientDrawable;
+          import android.inputmethodservice.InputMethodService;
           import android.view.Gravity;
           import android.view.View;
           import android.view.ViewGroup;
@@ -137,7 +130,6 @@ jobs:
           import android.widget.LinearLayout;
 
           public class LuriIME extends InputMethodService {
-
               private boolean english = false;
 
               private final String[][] luriRows = {
@@ -180,7 +172,6 @@ jobs:
                           button.setText(key.equals("EN") ? "لوری" : key);
                           button.setTextSize(key.length() > 2 ? 14 : 18);
                           button.setAllCaps(false);
-                          button.setTypeface(Typeface.DEFAULT);
                           button.setPadding(0, 0, 0, 0);
 
                           GradientDrawable bg = new GradientDrawable();
@@ -219,7 +210,7 @@ jobs:
                   } else if (key.equals("↵")) {
                       ic.commitText("\n", 1);
                   } else if (key.equals("⇧")) {
-                      // Shift is reserved for a future uppercase layout.
+                      // Shift reserved for a future uppercase layout.
                   } else {
                       ic.commitText(key, 1);
                   }
@@ -230,23 +221,44 @@ jobs:
       - name: Build APK
         run: gradle assembleDebug --stacktrace
 
-      - name: Verify APK
+      - name: Verify APK file
         shell: bash
         run: |
           set -euxo pipefail
-          ls -lah app/build/outputs/apk/debug/
-          test -f app/build/outputs/apk/debug/app-debug.apk
-          test -s app/build/outputs/apk/debug/app-debug.apk
-          file app/build/outputs/apk/debug/app-debug.apk
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -f "$APK"
+          test -s "$APK"
+          ls -lah "$APK"
+          file "$APK"
+          unzip -t "$APK"
 
       - name: Inspect APK contents
         shell: bash
         run: |
           set -euxo pipefail
-          unzip -t app/build/outputs/apk/debug/app-debug.apk
-          unzip -l app/build/outputs/apk/debug/app-debug.apk
-          echo "APK size in bytes:"
-          stat -c '%s' app/build/outputs/apk/debug/app-debug.apk
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+
+          echo "=== APK size ==="
+          stat -c '%s bytes' "$APK"
+
+          echo "=== APK entries ==="
+          unzip -l "$APK"
+
+          echo "=== Compiled classes ==="
+          mkdir -p /tmp/luri-dex
+          unzip -o "$APK" 'classes*.dex' -d /tmp/luri-dex
+
+          if command -v strings >/dev/null 2>&1; then
+            strings /tmp/luri-dex/classes*.dex \
+              | grep -E 'LuriIME|com/luri/keyboard|InputMethodService' \
+              || true
+          fi
+
+          echo "=== Android build tools ==="
+          AAPT="$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -n 1)"
+          test -n "$AAPT"
+          "$AAPT" dump badging "$APK"
+          "$AAPT" dump xmltree "$APK" AndroidManifest.xml
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
