@@ -1,4 +1,3 @@
-
 name: Build Lurish Keyboard APK
 
 on:
@@ -12,9 +11,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Java
@@ -28,27 +26,19 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Create Android project
+      - name: Generate Android project
         shell: bash
         run: |
           mkdir -p app/src/main/java/com/lurish/keyboard
-          mkdir -p app/src/main/res/xml
-          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/xml app/src/main/res/values
 
           cat > settings.gradle <<'EOF'
           pluginManagement {
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
+              repositories { google(); mavenCentral(); gradlePluginPortal() }
           }
           dependencyResolutionManagement {
               repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories {
-                  google()
-                  mavenCentral()
-              }
+              repositories { google(); mavenCentral() }
           }
           rootProject.name = 'Lurish'
           include ':app'
@@ -61,20 +51,17 @@ jobs:
           EOF
 
           cat > app/build.gradle <<'EOF'
-          plugins {
-              id 'com.android.application'
-          }
+          plugins { id 'com.android.application' }
 
           android {
               namespace 'com.lurish.keyboard'
               compileSdk 35
-
               defaultConfig {
                   applicationId 'com.lurish.keyboard'
                   minSdk 23
                   targetSdk 28
-                  versionCode 2
-                  versionName '2.0'
+                  versionCode 3
+                  versionName '3.0'
               }
           }
           EOF
@@ -99,7 +86,10 @@ jobs:
                   android:allowBackup="true"
                   android:supportsRtl="true"
                   android:theme="@android:style/Theme.Material.Light.NoActionBar">
-
+                  <activity
+                      android:name=".SettingsActivity"
+                      android:label="Lurish Settings"
+                      android:exported="true" />
                   <service
                       android:name=".LurishIME"
                       android:label="@string/ime_name"
@@ -116,6 +106,99 @@ jobs:
           </manifest>
           EOF
 
+          cat > app/src/main/java/com/lurish/keyboard/SettingsActivity.java <<'EOF'
+          package com.lurish.keyboard;
+
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.content.SharedPreferences;
+          import android.graphics.Color;
+          import android.view.Gravity;
+          import android.widget.LinearLayout;
+          import android.widget.TextView;
+          import android.widget.SeekBar;
+          import android.widget.Switch;
+          import android.widget.Button;
+
+          public class SettingsActivity extends Activity {
+              private SharedPreferences prefs;
+              private LinearLayout root;
+              private final int bg = Color.rgb(250, 225, 230);
+              private final int ink = Color.rgb(35, 31, 32);
+
+              @Override public void onCreate(Bundle b) {
+                  super.onCreate(b);
+                  prefs = getSharedPreferences("lurish", MODE_PRIVATE);
+                  root = new LinearLayout(this);
+                  root.setOrientation(LinearLayout.VERTICAL);
+                  root.setPadding(28, 24, 28, 24);
+                  root.setBackgroundColor(bg);
+
+                  TextView title = new TextView(this);
+                  title.setText("Lurish Settings");
+                  title.setTextColor(ink);
+                  title.setTextSize(24);
+                  title.setGravity(Gravity.CENTER);
+                  root.addView(title);
+
+                  addSlider("Keyboard height", "height", 220, 340, 270, "dp");
+                  addSlider("Key size", "keyHeight", 32, 48, 38, "dp");
+                  addSlider("Key spacing", "spacing", 0, 5, 2, "dp");
+                  addSlider("Pink accent intensity", "pink", 1, 10, 6, "/10");
+
+                  addSwitch("Show number row", "numbers", true);
+                  addSwitch("Show toolbar", "toolbar", true);
+                  addSwitch("Show key labels in Latin layout", "latinLabels", true);
+
+                  Button reset = new Button(this);
+                  reset.setText("Reset settings");
+                  reset.setOnClickListener(v -> {
+                      prefs.edit().clear().apply();
+                      recreate();
+                  });
+                  root.addView(reset);
+                  setContentView(root);
+              }
+
+              private void addSlider(String label, String key, int min, int max,
+                                     int def, String suffix) {
+                  TextView t = new TextView(this);
+                  t.setText(label);
+                  t.setTextColor(ink);
+                  t.setTextSize(16);
+                  root.addView(t);
+                  SeekBar bar = new SeekBar(this);
+                  bar.setMax(max - min);
+                  bar.setProgress(prefs.getInt(key, def) - min);
+                  TextView value = new TextView(this);
+                  value.setText((min + bar.getProgress()) + " " + suffix);
+                  value.setTextColor(ink);
+                  bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                      public void onProgressChanged(SeekBar s, int p, boolean user) {
+                          int v = min + p;
+                          value.setText(v + " " + suffix);
+                          if (user) prefs.edit().putInt(key, v).apply();
+                      }
+                      public void onStartTrackingTouch(SeekBar s) {}
+                      public void onStopTrackingTouch(SeekBar s) {}
+                  });
+                  root.addView(bar);
+                  root.addView(value);
+              }
+
+              private void addSwitch(String label, String key, boolean def) {
+                  Switch sw = new Switch(this);
+                  sw.setText(label);
+                  sw.setTextColor(ink);
+                  sw.setChecked(prefs.getBoolean(key, def));
+                  sw.setPadding(0, 8, 0, 8);
+                  sw.setOnCheckedChangeListener((button, checked) ->
+                      prefs.edit().putBoolean(key, checked).apply());
+                  root.addView(sw);
+              }
+          }
+          EOF
+
           cat > app/src/main/java/com/lurish/keyboard/LurishIME.java <<'EOF'
           package com.lurish.keyboard;
 
@@ -126,117 +209,109 @@ jobs:
           import android.content.ClipData;
           import android.content.ClipboardManager;
           import android.content.Context;
+          import android.content.Intent;
+          import android.content.SharedPreferences;
           import android.view.Gravity;
+          import android.view.KeyEvent;
           import android.view.View;
           import android.view.inputmethod.InputConnection;
           import android.widget.Button;
           import android.widget.LinearLayout;
-          import android.widget.TextView;
-          import java.util.ArrayList;
-          import java.util.List;
+          import java.text.Normalizer;
 
           public class LurishIME extends InputMethodService {
-
-              private static final int BG = Color.rgb(250, 235, 237);
-              private static final int KEY = Color.rgb(255, 254, 253);
-              private static final int PINK = Color.rgb(241, 202, 210);
-              private static final int ACCENT = Color.rgb(211, 111, 133);
-              private static final int INK = Color.rgb(43, 35, 42);
-              private static final int MUTED = Color.rgb(119, 111, 121);
-
+              private static final int BG = Color.rgb(250, 225, 230);
+              private static final int KEY = Color.rgb(255, 255, 255);
+              private static final int INK = Color.rgb(32, 30, 32);
+              private static final int BORDER = Color.rgb(235, 211, 216);
+              private static final int PINK = Color.rgb(224, 125, 149);
+              private static final int PINK_DARK = Color.rgb(202, 87, 119);
               private boolean latinMode = false;
-              private LinearLayout root;
-              private LinearLayout keysArea;
+              private boolean symbolMode = false;
+              private LinearLayout root, keysArea;
+              private SharedPreferences prefs;
 
-              // Exact approved mapping: Northern Luri -> Latin.
               private static final String[][] MAP = {
-                  {"ا","a"}, {"ب","b"}, {"پ","p"}, {"ت","t"},
-                  {"ج","c"}, {"چ","ç"}, {"خ","x"}, {"د","d"},
-                  {"ر","r"}, {"ز","z"}, {"ژ","j"}, {"س","s"},
-                  {"ش","ş"}, {"غ","q"}, {"ف","f"}, {"ق","q̇"},
-                  {"ل","l"}, {"م","m"}, {"ن","n"}, {"و","o"},
-                  {"ه","h"}, {"ی","y"}, {"ک","k"}, {"گ","g"},
-                  {"ڡ","oo"}, {"ڢ","w"}, {"ڤ","v"}, {"ڶ","ll"},
-                  {"ڹ","ŋ"}, {"ۏ","ů"}, {"ݕ","ee"}, {"ݖ","ǝǝ"},
-                  {"ݢ","ḳ"}, {"ٮ","ǝ"}, {"د̣","ḍ"}, {"ی̇","i"},
-                  {"وو","u"}, {"ا̇","aa"}, {"ڔ","rr"}
+                  {"ا","a"},{"ب","b"},{"پ","p"},{"ت","t"},{"ج","c"},
+                  {"چ","ç"},{"خ","x"},{"د","d"},{"ر","r"},{"ز","z"},
+                  {"ژ","j"},{"س","s"},{"ش","ş"},{"غ","q"},{"ف","f"},
+                  {"ق","q̇"},{"ل","l"},{"م","m"},{"ن","n"},{"و","o"},
+                  {"ه","h"},{"ی","y"},{"ک","k"},{"گ","g"},{"ڡ","oo"},
+                  {"ڢ","w"},{"ڤ","v"},{"ڶ","ll"},{"ڹ","ŋ"},{"ۏ","ů"},
+                  {"ݕ","ee"},{"ݖ","ǝǝ"},{"ݢ","ḳ"},{"ٮ","ǝ"},
+                  {"د̣","ḍ"},{"ی̇","i"},{"وو","u"},{"ا̇","aa"},{"ڔ","rr"}
               };
 
-              @Override
-              public View onCreateInputView() {
-                  return createKeyboard();
+              @Override public void onCreate() {
+                  super.onCreate();
+                  prefs = getSharedPreferences("lurish", MODE_PRIVATE);
               }
 
-              private GradientDrawable shape(int color, int radius) {
+              @Override public View onCreateInputView() { return buildKeyboard(); }
+
+              private int dp(float v) {
+                  return (int)(v * getResources().getDisplayMetrics().density + 0.5f);
+              }
+
+              private int setting(String k, int def) { return prefs.getInt(k, def); }
+              private boolean enabled(String k, boolean def) { return prefs.getBoolean(k, def); }
+              private int accent() {
+                  int level = setting("pink", 6);
+                  return Color.rgb(255 - level * 4, 220 - level * 8, 228 - level * 5);
+              }
+
+              private GradientDrawable background(int color, int radius) {
                   GradientDrawable d = new GradientDrawable();
                   d.setColor(color);
                   d.setCornerRadius(dp(radius));
-                  d.setStroke(dp(1), Color.rgb(239, 220, 223));
+                  d.setStroke(dp(1), BORDER);
                   return d;
               }
 
-              private int dp(float value) {
-                  return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
-              }
-
-              private LinearLayout column() {
-                  LinearLayout l = new LinearLayout(this);
-                  l.setOrientation(LinearLayout.VERTICAL);
-                  l.setBackgroundColor(BG);
-                  return l;
-              }
-
               private LinearLayout row() {
-                  LinearLayout l = new LinearLayout(this);
-                  l.setOrientation(LinearLayout.HORIZONTAL);
-                  l.setGravity(Gravity.CENTER);
-                  return l;
+                  LinearLayout r = new LinearLayout(this);
+                  r.setOrientation(LinearLayout.HORIZONTAL);
+                  r.setGravity(Gravity.CENTER);
+                  return r;
               }
 
-              private TextView text(String value, int size, int color) {
-                  TextView t = new TextView(this);
-                  t.setText(value);
-                  t.setTextSize(size);
-                  t.setTextColor(color);
-                  t.setGravity(Gravity.CENTER);
-                  t.setTypeface(Typeface.DEFAULT);
-                  return t;
-              }
-
-              private Button button(String label, int color, Runnable action) {
+              private Button makeButton(String label, int color, Runnable action) {
                   Button b = new Button(this);
                   b.setText(label);
                   b.setTextColor(INK);
-                  b.setTextSize(19);
+                  b.setTextSize(18);
                   b.setAllCaps(false);
+                  b.setTypeface(Typeface.DEFAULT);
                   b.setMinHeight(0);
                   b.setMinimumHeight(0);
                   b.setMinWidth(0);
                   b.setMinimumWidth(0);
-                  b.setPadding(dp(2), dp(2), dp(2), dp(2));
-                  b.setBackground(shape(color, 13));
-                  b.setElevation(dp(2));
+                  b.setPadding(dp(1), 0, dp(1), 0);
+                  b.setBackground(background(color, 7));
+                  b.setElevation(dp(1.5f));
                   b.setOnClickListener(v -> action.run());
                   return b;
               }
 
-              private void addKey(LinearLayout row, String label,
-                                 String output, int color, float weight,
-                                 int textSize) {
-                  Button b = button(label, color, () -> commit(output));
-                  b.setTextSize(textSize);
-                  LinearLayout.LayoutParams p =
-                      new LinearLayout.LayoutParams(0, dp(47), weight);
-                  p.setMargins(dp(2), dp(3), dp(2), dp(3));
+              private void key(LinearLayout row, String label, String output,
+                               int color, float weight) {
+                  Button b = makeButton(label, color, () -> commit(output));
+                  b.setTextSize(label.length() > 2 ? 15 : 20);
+                  LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
+                      0, dp(setting("keyHeight", 38)), weight);
+                  int gap = setting("spacing", 2);
+                  p.setMargins(dp(gap), dp(1), dp(gap), dp(1));
                   row.addView(b, p);
               }
 
-              private void addAction(LinearLayout row, String label,
-                                     int color, float weight, Runnable action) {
-                  Button b = button(label, color, action);
-                  LinearLayout.LayoutParams p =
-                      new LinearLayout.LayoutParams(0, dp(47), weight);
-                  p.setMargins(dp(2), dp(3), dp(2), dp(3));
+              private void action(LinearLayout row, String label, int color,
+                                 float weight, Runnable task) {
+                  Button b = makeButton(label, color, task);
+                  b.setTextSize(label.length() > 5 ? 12 : 17);
+                  LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
+                      0, dp(setting("keyHeight", 38)), weight);
+                  int gap = setting("spacing", 2);
+                  p.setMargins(dp(gap), dp(1), dp(gap), dp(1));
                   row.addView(b, p);
               }
 
@@ -245,243 +320,182 @@ jobs:
                   if (ic != null) ic.commitText(s, 1);
               }
 
-              private void backspace() {
+              private void delete() {
                   InputConnection ic = getCurrentInputConnection();
                   if (ic == null) return;
-
                   CharSequence selected = ic.getSelectedText(0);
                   if (selected != null && selected.length() > 0) {
                       ic.commitText("", 1);
                       return;
                   }
-
-                  CharSequence before = ic.getTextBeforeCursor(8, 0);
+                  CharSequence before = ic.getTextBeforeCursor(32, 0);
                   if (before == null || before.length() == 0) {
                       ic.deleteSurroundingText(1, 0);
                       return;
                   }
-
-                  // Delete the last base character and any combining marks
-                  // attached to it, including Arabic combining dot marks.
-                  int end = before.length();
-                  int start = end - 1;
-                  while (start > 0) {
-                      int cp = Character.codePointAt(before, start);
-                      int type = Character.getType(cp);
-                      if (type == Character.NON_SPACING_MARK ||
-                          type == Character.COMBINING_SPACING_MARK ||
-                          type == Character.ENCLOSING_MARK) {
-                          start -= Character.charCount(
-                              Character.codePointBefore(before, start));
-                      } else {
+                  String s = before.toString();
+                  int count = 1;
+                  String[] sequences = {"ǝǝ","q̇","د̣","ی̇","ا̇","وو","oo","ll","ee","aa","rr"};
+                  boolean matched = false;
+                  for (String seq : sequences) {
+                      if (s.endsWith(seq)) {
+                          count = seq.length();
+                          matched = true;
                           break;
                       }
                   }
-
-                  int last = Character.codePointBefore(before, end);
-                  int deleteCount = Character.charCount(last);
-                  int cursor = end - deleteCount;
-                  while (cursor > 0) {
-                      int cp = Character.codePointBefore(before, cursor);
-                      int type = Character.getType(cp);
-                      if (type == Character.NON_SPACING_MARK ||
-                          type == Character.COMBINING_SPACING_MARK ||
-                          type == Character.ENCLOSING_MARK) {
-                          deleteCount += Character.charCount(cp);
-                          cursor -= Character.charCount(cp);
-                      } else {
-                          break;
+                  if (!matched) {
+                      int end = s.length();
+                      int i = end;
+                      int cp = s.codePointBefore(i);
+                      count = Character.charCount(cp);
+                      i -= count;
+                      while (i > 0) {
+                          int prev = s.codePointBefore(i);
+                          int type = Character.getType(prev);
+                          if (type == Character.NON_SPACING_MARK ||
+                              type == Character.COMBINING_SPACING_MARK ||
+                              type == Character.ENCLOSING_MARK) {
+                              int n = Character.charCount(prev);
+                              count += n;
+                              i -= n;
+                          } else break;
                       }
                   }
-
-                  // Multi-character key outputs should delete as one keypress.
-                  String[] multi = {"oo","ll","ee","ǝǝ","aa","rr","q̇","ḳ","ḍ","ŋ","ů","ç","ş"};
-                  String text = before.toString();
-                  for (String m : multi) {
-                      if (text.endsWith(m)) {
-                          deleteCount = m.length();
-                          break;
-                      }
-                  }
-
-                  ic.deleteSurroundingText(deleteCount, 0);
+                  ic.deleteSurroundingText(count, 0);
               }
 
-              private void pasteClipboard() {
-                  ClipboardManager cm =
-                      (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+              private void openSettings() {
+                  Intent i = new Intent(this, SettingsActivity.class);
+                  i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                  startActivity(i);
+              }
+
+              private void paste() {
+                  ClipboardManager cm = (ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE);
                   if (cm != null && cm.hasPrimaryClip()) {
                       ClipData clip = cm.getPrimaryClip();
                       if (clip != null && clip.getItemCount() > 0) {
-                          CharSequence s = clip.getItemAt(0).coerceToText(this);
-                          if (s != null) commit(s.toString());
+                          CharSequence c = clip.getItemAt(0).coerceToText(this);
+                          if (c != null) commit(c.toString());
                       }
                   }
               }
 
-              private void switchMode() {
-                  latinMode = !latinMode;
-                  setInputView(createKeyboard());
-              }
+              private View buildKeyboard() {
+                  root = new LinearLayout(this);
+                  root.setOrientation(LinearLayout.VERTICAL);
+                  root.setBackgroundColor(BG);
+                  int pad = dp(3);
+                  root.setPadding(pad, pad, pad, pad);
 
-              private View createKeyboard() {
-                  root = column();
-                  root.setPadding(dp(5), dp(5), dp(5), dp(5));
-
-                  // Toolbar
-                  LinearLayout toolbar = row();
-                  toolbar.setPadding(0, 0, 0, dp(3));
-                  addAction(toolbar, "▦", PINK, 1, () -> switchMode());
-                  addAction(toolbar, "▤", KEY, 1, () -> pasteClipboard());
-                  addAction(toolbar, "☺", KEY, 1, () -> commit("😊"));
-                  addAction(toolbar, "⚙", KEY, 1, () -> showSettings());
-                  addAction(toolbar, latinMode ? "Latin" : "لری", PINK, 1.5f,
-                      () -> switchMode());
-                  addAction(toolbar, "◎", KEY, 1, () -> {
-                      try {
-                          switchToNextInputMethod(false);
-                      } catch (Exception ignored) { }
-                  });
-                  root.addView(toolbar);
-
-                  // Permanent number row
-                  LinearLayout numbers = row();
-                  String[] nums = {"1","2","3","4","5","6","7","8","9","0"};
-                  for (String n : nums) {
-                      addKey(numbers, n, n, KEY, 1, 17);
+                  if (enabled("toolbar", true)) {
+                      LinearLayout tools = row();
+                      action(tools, "☷", accent(), 1, () -> { symbolMode = !symbolMode; refresh(); });
+                      action(tools, "▤", KEY, 1, this::paste);
+                      action(tools, "☺", KEY, 1, () -> commit("😊"));
+                      action(tools, "⚙", KEY, 1, this::openSettings);
+                      action(tools, latinMode ? "Latin" : "Luri", accent(), 1.5f,
+                          () -> { latinMode = !latinMode; symbolMode = false; refresh(); });
+                      action(tools, "🌐", KEY, 1, () -> {
+                          try { switchToNextInputMethod(false); } catch (Exception ignored) {}
+                      });
+                      root.addView(tools);
                   }
-                  root.addView(numbers);
 
-                  keysArea = column();
-                  root.addView(keysArea, new LinearLayout.LayoutParams(
-                      -1, 0, 1));
+                  if (enabled("numbers", true)) {
+                      LinearLayout nums = row();
+                      for (String n : new String[]{"1","2","3","4","5","6","7","8","9","0"})
+                          key(nums, n, n, KEY, 1);
+                      root.addView(nums);
+                  }
 
-                  if (latinMode) buildLatin();
-                  else buildLuri();
+                  keysArea = new LinearLayout(this);
+                  keysArea.setOrientation(LinearLayout.VERTICAL);
+                  LinearLayout.LayoutParams area = new LinearLayout.LayoutParams(
+                      -1, 0, 1);
+                  root.addView(keysArea, area);
 
-                  // Bottom controls
+                  buildRows();
+
                   LinearLayout bottom = row();
-                  addAction(bottom, "?123", PINK, 1.2f,
-                      () -> buildSymbols());
-                  addAction(bottom, "☺", PINK, 0.9f,
-                      () -> commit("😊"));
-                  addAction(bottom, ",", KEY, 0.7f,
-                      () -> commit(","));
-                  addAction(bottom, "space", KEY, 3.8f,
-                      () -> commit(" "));
-                  addAction(bottom, ".", KEY, 0.7f,
-                      () -> commit("."));
-                  addAction(bottom, "⌫", PINK, 1.0f,
-                      () -> backspace());
-                  addAction(bottom, "↵", ACCENT, 1.1f, () -> {
+                  action(bottom, "?123", accent(), 1.15f, () -> { symbolMode = !symbolMode; refresh(); });
+                  action(bottom, "☺", accent(), 0.8f, () -> commit("😊"));
+                  action(bottom, ",", KEY, 0.65f, () -> commit(","));
+                  action(bottom, "space", KEY, 3.2f, () -> commit(" "));
+                  action(bottom, ".", KEY, 0.65f, () -> commit("."));
+                  action(bottom, "⌫", accent(), 1.0f, this::delete);
+                  action(bottom, "↵", PINK_DARK, 1.0f, () -> {
                       InputConnection ic = getCurrentInputConnection();
-                      if (ic != null) ic.sendKeyEvent(
-                          new android.view.KeyEvent(
-                              android.view.KeyEvent.ACTION_DOWN,
-                              android.view.KeyEvent.KEYCODE_ENTER));
+                      if (ic != null) ic.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN,
+                          KeyEvent.KEYCODE_ENTER));
                   });
                   root.addView(bottom);
-
-                  LinearLayout.LayoutParams bottomParams =
-                      (LinearLayout.LayoutParams) bottom.getLayoutParams();
-                  if (bottomParams != null) bottomParams.topMargin = dp(3);
-
                   return root;
               }
 
-              private void buildLuri() {
-                  keysArea.removeAllViews();
-
-                  String[][] rows = {
-                      {"ا","ب","پ","ت","ج","چ","خ","د","ر","ز"},
-                      {"ژ","س","ش","غ","ف","ق","ل","م","ن","و"},
-                      {"ه","ی","ک","گ","ڡ","ڢ","ڤ","ڶ","ڹ","ۏ"},
-                      {"ݕ","ݖ","ݢ","ٮ","د̣","ی̇","وو","ا̇","ڔ"}
-                  };
-
-                  for (String[] keys : rows) {
-                      LinearLayout r = row();
-                      for (String key : keys) {
-                          addKey(r, key, key, KEY, 1, 21);
-                      }
-                      keysArea.addView(r);
-                  }
-
-                  LinearLayout tools = row();
-                  addAction(tools, "نیم‌فاصله", PINK, 1.5f,
-                      () -> commit("\u200C"));
-                  addAction(tools, "کشیده ـ", PINK, 1.2f,
-                      () -> commit("ـ"));
-                  addAction(tools, "؟", KEY, 0.8f,
-                      () -> commit("؟"));
-                  addAction(tools, ":", KEY, 0.8f,
-                      () -> commit(":"));
-                  addAction(tools, "؛", KEY, 0.8f,
-                      () -> commit("؛"));
-                  keysArea.addView(tools);
+              private void refresh() {
+                  setInputView(buildKeyboard());
               }
 
-              private void buildLatin() {
+              private void buildRows() {
                   keysArea.removeAllViews();
-
-                  // All outputs are inserted as complete mappings.
-                  String[][] outputs = {
-                      {"q̇","w","e","r","t","y","u","i","o","p"},
-                      {"a","s","d","f","g","h","j","k","l"},
-                      {"ç","ş","x","c","z","v","b","n","m"},
-                      {"oo","ll","ee","ǝǝ","aa","rr","ŋ","ů","ḳ","ḍ","ǝ"}
-                  };
-
-                  for (String[] keys : outputs) {
-                      LinearLayout r = row();
-                      for (String key : keys) {
-                          addKey(r, key, key, KEY, 1, 18);
+                  if (symbolMode) {
+                      String[][] rows = {
+                          {"!","@","#","$","%","&","*","-","+"},
+                          {"(",")","[","]","{","}","/","\\","="},
+                          {",",".","?",";",":","…","_","ـ","'"}
+                      };
+                      for (String[] rr : rows) {
+                          LinearLayout r = row();
+                          for (String s : rr) key(r, s, s, KEY, 1);
+                          keysArea.addView(r);
                       }
-                      keysArea.addView(r);
+                      LinearLayout extra = row();
+                      action(extra, "ABC", accent(), 1, () -> { symbolMode = false; refresh(); });
+                      action(extra, "ZWNJ", accent(), 1.2f, () -> commit("\u200C"));
+                      action(extra, "Tilde ـ", accent(), 1.4f, () -> commit("ـ"));
+                      keysArea.addView(extra);
+                      return;
                   }
 
-                  LinearLayout extra = row();
-                  addAction(extra, "Latin", PINK, 1.0f,
-                      () -> switchMode());
-                  addAction(extra, "نیم‌فاصله", PINK, 1.5f,
-                      () -> commit("\u200C"));
-                  addAction(extra, "کشیده ـ", PINK, 1.2f,
-                      () -> commit("ـ"));
-                  addAction(extra, "؟", KEY, 0.8f,
-                      () -> commit("?"));
-                  keysArea.addView(extra);
-              }
-
-              private void buildSymbols() {
-                  keysArea.removeAllViews();
-                  String[][] symbols = {
-                      {"!","@","#","$","%","&","*","-","+"},
-                      {"(",")","[","]","{","}","/","\\","="},
-                      {",",".","؟","؛",":","…","_","ـ","@"}
-                  };
-                  for (String[] keys : symbols) {
-                      LinearLayout r = row();
-                      for (String key : keys) {
-                          addKey(r, key, key, KEY, 1, 20);
+                  if (!latinMode) {
+                      String[][] rows = {
+                          {"ا","ب","پ","ت","ج","چ","خ","د","ر","ز"},
+                          {"ژ","س","ش","غ","ف","ق","ل","م","ن","و"},
+                          {"ه","ی","ک","گ","ڡ","ڢ","ڤ","ڶ","ڹ","ۏ"},
+                          {"ݕ","ݖ","ݢ","ٮ","د̣","ی̇","وو","ا̇","ڔ"}
+                      };
+                      for (String[] rr : rows) {
+                          LinearLayout r = row();
+                          for (String s : rr) key(r, s, s, KEY, 1);
+                          keysArea.addView(r);
                       }
-                      keysArea.addView(r);
+                      LinearLayout extra = row();
+                      action(extra, "ZWNJ", accent(), 1.2f, () -> commit("\u200C"));
+                      action(extra, "Tilde ـ", accent(), 1.5f, () -> commit("ـ"));
+                      action(extra, "؟", KEY, 0.8f, () -> commit("؟"));
+                      action(extra, "؛", KEY, 0.8f, () -> commit("؛"));
+                      keysArea.addView(extra);
+                  } else {
+                      String[][] rows = {
+                          {"q̇","w","e","r","t","y","u","i","o","p"},
+                          {"a","s","d","f","g","h","j","k","l"},
+                          {"ç","ş","x","c","z","v","b","n","m"},
+                          {"oo","ll","ee","ǝǝ","aa","rr","ŋ","ů","ḳ","ḍ","ǝ"}
+                      };
+                      for (String[] rr : rows) {
+                          LinearLayout r = row();
+                          for (String s : rr) key(r, s, s, KEY, 1);
+                          keysArea.addView(r);
+                      }
+                      LinearLayout extra = row();
+                      action(extra, "ZWNJ", accent(), 1.2f, () -> commit("\u200C"));
+                      action(extra, "Tilde ـ", accent(), 1.5f, () -> commit("ـ"));
+                      action(extra, "?", KEY, 0.8f, () -> commit("?"));
+                      action(extra, ";", KEY, 0.8f, () -> commit(";"));
+                      keysArea.addView(extra);
                   }
-                  LinearLayout r = row();
-                  addAction(r, "ABC", PINK, 1.2f,
-                      () -> {
-                          if (latinMode) buildLatin();
-                          else buildLuri();
-                      });
-                  addAction(r, "نیم‌فاصله", PINK, 1.5f,
-                      () -> commit("\u200C"));
-                  addAction(r, "کشیده ـ", PINK, 1.2f,
-                      () -> commit("ـ"));
-                  keysArea.addView(r);
-              }
-
-              private void showSettings() {
-                  // Simple working mode selector; no extra permissions required.
-                  switchMode();
               }
           }
           EOF
@@ -492,8 +506,8 @@ jobs:
       - name: Verify APK
         run: |
           test -f app/build/outputs/apk/debug/app-debug.apk
-          ls -lh app/build/outputs/apk/debug/app-debug.apk
           unzip -t app/build/outputs/apk/debug/app-debug.apk
+          ls -lh app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
