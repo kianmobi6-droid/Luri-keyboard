@@ -60,8 +60,8 @@ jobs:
                   applicationId 'com.lurish.keyboard'
                   minSdk 23
                   targetSdk 28
-                  versionCode 3
-                  versionName '3.0'
+                  versionCode 4
+                  versionName '4.0'
               }
           }
           EOF
@@ -216,6 +216,7 @@ jobs:
           import android.view.View;
           import android.view.inputmethod.InputConnection;
           import android.widget.Button;
+          import android.widget.PopupWindow;
           import android.widget.LinearLayout;
           import java.text.Normalizer;
 
@@ -231,15 +232,16 @@ jobs:
               private LinearLayout root, keysArea;
               private SharedPreferences prefs;
 
+              // Approved Northern Luri mappings. Long-press alternatives are defined below.
               private static final String[][] MAP = {
                   {"ا","a"},{"ب","b"},{"پ","p"},{"ت","t"},{"ج","c"},
-                  {"چ","ç"},{"خ","x"},{"د","d"},{"ر","r"},{"ز","z"},
-                  {"ژ","j"},{"س","s"},{"ش","ş"},{"غ","q"},{"ف","f"},
-                  {"ق","q̇"},{"ل","l"},{"م","m"},{"ن","n"},{"و","o"},
-                  {"ه","h"},{"ی","y"},{"ک","k"},{"گ","g"},{"ڡ","oo"},
-                  {"ڢ","w"},{"ڤ","v"},{"ڶ","ll"},{"ڹ","ŋ"},{"ۏ","ů"},
-                  {"ݕ","ee"},{"ݖ","ǝǝ"},{"ݢ","ḳ"},{"ٮ","ǝ"},
-                  {"د̣","ḍ"},{"ی̇","i"},{"وو","u"},{"ا̇","aa"},{"ڔ","rr"}
+                  {"چ","ç"},{"خ","x"},{"د","d"},{"ڌ","ḍ"},{"ر","r"},
+                  {"ڔ","rr"},{"ز","z"},{"ژ","j"},{"س","s"},{"ش","ş"},
+                  {"غ","q"},{"ف","f"},{"ق","q̇"},{"ل","l"},{"ڶ","ll"},
+                  {"م","m"},{"ن","n"},{"ڹ","ŋ"},{"و","o"},{"ۏ","ů"},
+                  {"ه","h"},{"ی","y"},{"ێ","y"},{"ک","k"},{"ݢ","ḳ"},
+                  {"گ","g"},{"ڢ","w"},{"ڡ","oo"},{"ڤ","v"},{"ٮ","ǝ"},
+                  {"ݕ","ee"},{"ݖ","ǝǝ"},{"وو","u"},{"اٰ","aa"}
               };
 
               @Override public void onCreate() {
@@ -295,6 +297,60 @@ jobs:
                   return b;
               }
 
+              private String[] alternativesFor(String label) {
+                  switch (label) {
+                      case "ا": return new String[]{"اٰ"};
+                      case "د": return new String[]{"ڌ"};
+                      case "ر": return new String[]{"ڔ"};
+                      case "ل": return new String[]{"ڶ"};
+                      case "ن": return new String[]{"ڹ"};
+                      case "و": return new String[]{"ۏ"};
+                      case "ڢ": return new String[]{"ڡ"};
+                      case "ی": return new String[]{"ێ"};
+                      case "ک": return new String[]{"ݢ"};
+                      case "ٮ": return new String[]{"ݕ", "ݖ"};
+                      default: return new String[0];
+                  }
+              }
+
+              private void showAlternatives(View anchor, String[] alternatives) {
+                  if (alternatives == null || alternatives.length == 0) return;
+                  LinearLayout popupRow = new LinearLayout(this);
+                  popupRow.setOrientation(LinearLayout.HORIZONTAL);
+                  popupRow.setGravity(Gravity.CENTER);
+                  popupRow.setPadding(dp(4), dp(4), dp(4), dp(4));
+                  popupRow.setBackground(background(Color.rgb(255, 242, 246), 12));
+                  for (String letter : alternatives) {
+                      Button choice = makeButton(letter, KEY, () -> {
+                          commit(letter);
+                      });
+                      choice.setTextSize(23);
+                      LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(dp(52), dp(48));
+                      cp.setMargins(dp(3), 0, dp(3), 0);
+                      popupRow.addView(choice, cp);
+                  }
+                  PopupWindow popup = new PopupWindow(popupRow,
+                      LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT, true);
+                  popup.setBackgroundDrawable(background(Color.rgb(255, 242, 246), 12));
+                  popup.setElevation(dp(8));
+                  popup.setOutsideTouchable(true);
+                  int[] location = new int[2];
+                  anchor.getLocationOnScreen(location);
+                  popupRow.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+                  int popupWidth = popupRow.getMeasuredWidth();
+                  int x = Math.max(0, location[0] + anchor.getWidth() / 2 - popupWidth / 2);
+                  int y = Math.max(0, location[1] - dp(58));
+                  popup.showAtLocation(root, Gravity.TOP | Gravity.LEFT, x, y);
+                  // Choosing an alternative closes the popup after inserting the selected character.
+                  for (int i = 0; i < popupRow.getChildCount(); i++) {
+                      View child = popupRow.getChildAt(i);
+                      child.setOnClickListener(v -> {
+                          commit(((Button) v).getText().toString());
+                          popup.dismiss();
+                      });
+                  }
+              }
+
               private void key(LinearLayout row, String label, String output,
                                int color, float weight) {
                   Button b = makeButton(label, color, () -> commit(output));
@@ -304,6 +360,15 @@ jobs:
                   int gap = setting("spacing", 2);
                   p.setMargins(dp(gap), dp(2), dp(gap), dp(2));
                   row.addView(b, p);
+                  if (!latinMode && !symbolMode) {
+                      String[] alternatives = alternativesFor(label);
+                      if (alternatives.length > 0) {
+                          b.setOnLongClickListener(v -> {
+                              showAlternatives(v, alternatives);
+                              return true;
+                          });
+                      }
+                  }
               }
 
               private void action(LinearLayout row, String label, int color,
@@ -476,8 +541,7 @@ jobs:
                       String[][] rows = {
                           {"ا","ب","پ","ت","ج","چ","خ","د","ر","ز"},
                           {"ژ","س","ش","غ","ف","ق","ل","م","ن","و"},
-                          {"ه","ی","ک","گ","ڡ","ڢ","ڤ","ڶ","ڹ","ۏ"},
-                          {"ݕ","ݖ","ݢ","ٮ","د̣","ی̇","وو","ا̇","ڔ"}
+                          {"ه","ی","ک","گ","ڢ","ڤ","ٮ","وو"}
                       };
                       for (String[] rr : rows) {
                           LinearLayout r = row();
