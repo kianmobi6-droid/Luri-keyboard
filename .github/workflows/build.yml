@@ -315,40 +315,48 @@ jobs:
 
               private void showAlternatives(View anchor, String[] alternatives) {
                   if (alternatives == null || alternatives.length == 0) return;
+                  final PopupWindow[] popupRef = new PopupWindow[1];
                   LinearLayout popupRow = new LinearLayout(this);
                   popupRow.setOrientation(LinearLayout.HORIZONTAL);
                   popupRow.setGravity(Gravity.CENTER);
                   popupRow.setPadding(dp(4), dp(4), dp(4), dp(4));
                   popupRow.setBackground(background(Color.rgb(255, 242, 246), 12));
+
+                  PopupWindow popup = new PopupWindow(popupRow,
+                      LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT, true);
+                  popupRef[0] = popup;
+                  popup.setBackgroundDrawable(background(Color.rgb(255, 242, 246), 12));
+                  popup.setElevation(dp(8));
+                  popup.setOutsideTouchable(true);
+
                   for (String letter : alternatives) {
-                      Button choice = makeButton(letter, KEY, () -> {
-                          commit(letter);
-                      });
+                      Button choice = makeButton(letter, KEY, () -> {});
                       choice.setTextSize(23);
+                      choice.setFocusable(false);
+                      choice.setClickable(true);
+                      choice.setOnClickListener(v -> {
+                          String selected = letter;
+                          InputConnection ic = getCurrentInputConnection();
+                          if (ic != null) {
+                              ic.beginBatchEdit();
+                              ic.commitText(selected, 1);
+                              ic.endBatchEdit();
+                          }
+                          if (popupRef[0] != null && popupRef[0].isShowing()) popupRef[0].dismiss();
+                      });
                       LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(dp(52), dp(48));
                       cp.setMargins(dp(3), 0, dp(3), 0);
                       popupRow.addView(choice, cp);
                   }
-                  PopupWindow popup = new PopupWindow(popupRow,
-                      LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT, true);
-                  popup.setBackgroundDrawable(background(Color.rgb(255, 242, 246), 12));
-                  popup.setElevation(dp(8));
-                  popup.setOutsideTouchable(true);
+
                   int[] location = new int[2];
                   anchor.getLocationOnScreen(location);
-                  popupRow.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+                  popupRow.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                                   View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
                   int popupWidth = popupRow.getMeasuredWidth();
                   int x = Math.max(0, location[0] + anchor.getWidth() / 2 - popupWidth / 2);
                   int y = Math.max(0, location[1] - dp(58));
                   popup.showAtLocation(root, Gravity.TOP | Gravity.LEFT, x, y);
-                  // Choosing an alternative closes the popup after inserting the selected character.
-                  for (int i = 0; i < popupRow.getChildCount(); i++) {
-                      View child = popupRow.getChildAt(i);
-                      child.setOnClickListener(v -> {
-                          commit(((Button) v).getText().toString());
-                          popup.dismiss();
-                      });
-                  }
               }
 
               private void key(LinearLayout row, String label, String output,
@@ -532,7 +540,7 @@ jobs:
                       LinearLayout extra = row();
                       action(extra, "ABC", accent(), 1, () -> { symbolMode = false; refresh(); });
                       action(extra, "Mad", accent(), 1.2f, () -> commit("\u200C"));
-                      action(extra, "Nimad", accent(), 1.4f, () -> commit("ـ"));
+                      action(extra, "Nimad", accent(), 1.4f, () -> commit("\u200D\u0640\u200D"));
                       keysArea.addView(extra);
                       return;
                   }
@@ -550,7 +558,7 @@ jobs:
                       }
                       LinearLayout extra = row();
                       action(extra, "Mad", accent(), 1.2f, () -> commit("\u200C"));
-                      action(extra, "Nimad", accent(), 1.5f, () -> commit("ـ"));
+                      action(extra, "Nimad", accent(), 1.5f, () -> commit("\u200D\u0640\u200D"));
                       action(extra, "؟", KEY, 0.8f, () -> commit("؟"));
                       action(extra, "؛", KEY, 0.8f, () -> commit("؛"));
                       keysArea.addView(extra);
@@ -568,7 +576,7 @@ jobs:
                       }
                       LinearLayout extra = row();
                       action(extra, "Mad", accent(), 1.2f, () -> commit("\u200C"));
-                      action(extra, "Nimad", accent(), 1.5f, () -> commit("ـ"));
+                      action(extra, "Nimad", accent(), 1.5f, () -> commit("\u200D\u0640\u200D"));
                       action(extra, "?", KEY, 0.8f, () -> commit("?"));
                       action(extra, ";", KEY, 0.8f, () -> commit(";"));
                       keysArea.addView(extra);
