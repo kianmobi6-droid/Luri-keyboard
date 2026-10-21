@@ -141,8 +141,8 @@ jobs:
                   title.setGravity(Gravity.CENTER);
                   root.addView(title);
 
-                  addSlider("Keyboard height", "height", 220, 340, 270, "dp");
-                  addSlider("Key size", "keyHeight", 32, 48, 38, "dp");
+                  addSlider("Keyboard height", "height", 210, 320, 245, "dp");
+                  addSlider("Key size", "keyHeight", 28, 44, 32, "dp");
                   addSlider("Key spacing", "spacing", 0, 5, 2, "dp");
                   addSlider("Pink accent intensity", "pink", 1, 10, 6, "/10");
 
@@ -212,6 +212,7 @@ jobs:
           import android.content.Intent;
           import android.content.SharedPreferences;
           import android.view.Gravity;
+          import android.view.MotionEvent;
           import android.view.KeyEvent;
           import android.view.View;
           import android.view.inputmethod.InputConnection;
@@ -314,49 +315,100 @@ jobs:
               }
 
               private void showAlternatives(View anchor, String[] alternatives) {
-                  if (alternatives == null || alternatives.length == 0) return;
-                  final PopupWindow[] popupRef = new PopupWindow[1];
+                  if (alternatives == null || alternatives.length == 0 || root == null) return;
+                  final InputConnection targetConnection = getCurrentInputConnection();
+                  if (targetConnection == null) return;
+
                   LinearLayout popupRow = new LinearLayout(this);
                   popupRow.setOrientation(LinearLayout.HORIZONTAL);
                   popupRow.setGravity(Gravity.CENTER);
                   popupRow.setPadding(dp(4), dp(4), dp(4), dp(4));
                   popupRow.setBackground(background(Color.rgb(255, 242, 246), 12));
-
-                  PopupWindow popup = new PopupWindow(popupRow,
-                      LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT, true);
-                  popupRef[0] = popup;
+                  final java.util.ArrayList<Button> choices = new java.util.ArrayList<>();
+                  final int[] selectedIndex = {-1};
+                  final PopupWindow popup = new PopupWindow(popupRow,
+                      LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT, false);
                   popup.setBackgroundDrawable(background(Color.rgb(255, 242, 246), 12));
                   popup.setElevation(dp(8));
                   popup.setOutsideTouchable(true);
+                  popup.setTouchable(true);
+                  popup.setClippingEnabled(true);
 
-                  for (String letter : alternatives) {
-                      Button choice = makeButton(letter, KEY, () -> {});
+                  for (int i = 0; i < alternatives.length; i++) {
+                      final int choiceIndex = i;
+                      Button choice = makeButton(alternatives[i], KEY, () -> {});
                       choice.setTextSize(23);
                       choice.setFocusable(false);
-                      choice.setClickable(true);
-                      choice.setOnClickListener(v -> {
-                          String selected = letter;
-                          InputConnection ic = getCurrentInputConnection();
-                          if (ic != null) {
-                              ic.beginBatchEdit();
-                              ic.commitText(selected, 1);
-                              ic.endBatchEdit();
-                          }
-                          if (popupRef[0] != null && popupRef[0].isShowing()) popupRef[0].dismiss();
-                      });
-                      LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(dp(52), dp(48));
+                      choice.setClickable(false);
+                      LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(dp(52), dp(44));
                       cp.setMargins(dp(3), 0, dp(3), 0);
                       popupRow.addView(choice, cp);
+                      choices.add(choice);
                   }
 
-                  int[] location = new int[2];
-                  anchor.getLocationOnScreen(location);
+                  Runnable commitSelected = () -> {
+                      int index = selectedIndex[0];
+                      if (index >= 0 && index < alternatives.length) {
+                          targetConnection.beginBatchEdit();
+                          targetConnection.commitText(alternatives[index], 1);
+                          targetConnection.endBatchEdit();
+                      }
+                      if (popup.isShowing()) popup.dismiss();
+                  };
+
+                  for (int i = 0; i < choices.size(); i++) {
+                      final int choiceIndex = i;
+                      choices.get(i).setOnTouchListener((v, event) -> {
+                          if (event.getAction() == MotionEvent.ACTION_DOWN ||
+                              event.getAction() == MotionEvent.ACTION_MOVE) {
+                              float rawX = event.getRawX();
+                              int found = -1;
+                              for (int j = 0; j < choices.size(); j++) {
+                                  int[] pos = new int[2];
+                                  choices.get(j).getLocationOnScreen(pos);
+                                  if (rawX >= pos[0] && rawX <= pos[0] + choices.get(j).getWidth()) {
+                                      found = j;
+                                      break;
+                                  }
+                              }
+                              if (found >= 0) {
+                                  selectedIndex[0] = found;
+                                  for (int j = 0; j < choices.size(); j++) {
+                                      choices.get(j).setBackground(background(
+                                          j == found ? Color.rgb(246, 113, 143) : KEY, 11));
+                                      choices.get(j).setTextColor(INK);
+                                  }
+                              }
+                              return true;
+                          }
+                          if (event.getAction() == MotionEvent.ACTION_UP) {
+                              float rawX = event.getRawX();
+                              for (int j = 0; j < choices.size(); j++) {
+                                  int[] pos = new int[2];
+                                  choices.get(j).getLocationOnScreen(pos);
+                                  if (rawX >= pos[0] && rawX <= pos[0] + choices.get(j).getWidth()) {
+                                      selectedIndex[0] = j;
+                                      break;
+                                  }
+                              }
+                              commitSelected.run();
+                              return true;
+                          }
+                          if (event.getAction() == MotionEvent.ACTION_CANCEL) {
+                              if (popup.isShowing()) popup.dismiss();
+                              return true;
+                          }
+                          return true;
+                      });
+                  }
+
                   popupRow.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
                                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
                   int popupWidth = popupRow.getMeasuredWidth();
-                  int x = Math.max(0, location[0] + anchor.getWidth() / 2 - popupWidth / 2);
-                  int y = Math.max(0, location[1] - dp(58));
-                  popup.showAtLocation(root, Gravity.TOP | Gravity.LEFT, x, y);
+                  int popupHeight = popupRow.getMeasuredHeight();
+                  int xOffset = (anchor.getWidth() - popupWidth) / 2;
+                  int yOffset = -anchor.getHeight() - popupHeight - dp(4);
+                  popup.showAsDropDown(anchor, xOffset, yOffset);
               }
 
               private void key(LinearLayout row, String label, String output,
@@ -364,7 +416,7 @@ jobs:
                   Button b = makeButton(label, color, () -> commit(output));
                   b.setTextSize(label.length() > 2 ? 14 : 20);
                   LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
-                      0, dp(setting("keyHeight", 38)), weight);
+                      0, dp(setting("keyHeight", 32)), weight);
                   int gap = setting("spacing", 2);
                   p.setMargins(dp(gap), dp(2), dp(gap), dp(2));
                   row.addView(b, p);
@@ -384,7 +436,7 @@ jobs:
                   Button b = makeButton(label, color, task);
                   b.setTextSize(label.length() > 5 ? 11 : 16);
                   LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
-                      0, dp(setting("keyHeight", 38)), weight);
+                      0, dp(setting("keyHeight", 32)), weight);
                   int gap = setting("spacing", 2);
                   p.setMargins(dp(gap), dp(2), dp(gap), dp(2));
                   row.addView(b, p);
@@ -467,7 +519,7 @@ jobs:
                   root.setBackground(keyboardBg);
                   int pad = dp(4);
                   root.setPadding(pad, dp(5), pad, dp(5));
-                  int desiredHeight = setting("height", 270);
+                  int desiredHeight = setting("height", 245);
                   root.setMinimumHeight(dp(desiredHeight));
                   root.setLayoutParams(new android.view.ViewGroup.LayoutParams(-1, dp(desiredHeight)));
 
@@ -482,8 +534,8 @@ jobs:
                       action(tools, "🌐", KEY, 1, () -> {
                           try { switchToNextInputMethod(false); } catch (Exception ignored) {}
                       });
-                      LinearLayout.LayoutParams toolParams = new LinearLayout.LayoutParams(-1, dp(34));
-                      toolParams.bottomMargin = dp(3);
+                      LinearLayout.LayoutParams toolParams = new LinearLayout.LayoutParams(-1, dp(30));
+                      toolParams.bottomMargin = dp(2);
                       root.addView(tools, toolParams);
                   }
 
@@ -491,7 +543,7 @@ jobs:
                       LinearLayout nums = row();
                       for (String n : new String[]{"1","2","3","4","5","6","7","8","9","0"})
                           key(nums, n, n, KEY, 1);
-                      LinearLayout.LayoutParams numParams = new LinearLayout.LayoutParams(-1, dp(setting("keyHeight", 38)));
+                      LinearLayout.LayoutParams numParams = new LinearLayout.LayoutParams(-1, dp(setting("keyHeight", 32)));
                       numParams.bottomMargin = dp(2);
                       root.addView(nums, numParams);
                   }
